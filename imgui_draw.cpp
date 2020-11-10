@@ -1,4 +1,4 @@
-// dear imgui, v1.79 WIP
+// dear imgui, v1.80 WIP
 // (drawing and font code)
 
 /*
@@ -345,26 +345,17 @@ void ImGui::StyleColorsLight(ImGuiStyle* dst)
 }
 
 //-----------------------------------------------------------------------------
-// ImDrawList
+// [SECTION] ImDrawList
 //-----------------------------------------------------------------------------
 
 ImDrawListSharedData::ImDrawListSharedData()
 {
-    Font = NULL;
-    FontSize = 0.0f;
-    CurveTessellationTol = 0.0f;
-    CircleSegmentMaxError = 0.0f;
-    ClipRectFullscreen = ImVec4(-8192.0f, -8192.0f, +8192.0f, +8192.0f);
-    InitialFlags = ImDrawListFlags_None;
-
-    // Lookup tables
+    memset(this, 0, sizeof(*this));
     for (int i = 0; i < IM_ARRAYSIZE(ArcFastVtx); i++)
     {
         const float a = ((float)i * 2 * IM_PI) / (float)IM_ARRAYSIZE(ArcFastVtx);
         ArcFastVtx[i] = ImVec2(ImCos(a), ImSin(a));
     }
-    memset(CircleSegmentCounts, 0, sizeof(CircleSegmentCounts)); // This will be set by SetCircleSegmentMaxError()
-    TexUvLines = NULL;
 }
 
 void ImDrawListSharedData::SetCircleSegmentMaxError(float max_error)
@@ -1411,7 +1402,7 @@ void ImDrawList::AddImageRounded(ImTextureID user_texture_id, const ImVec2& p_mi
 
 
 //-----------------------------------------------------------------------------
-// ImDrawListSplitter
+// [SECTION] ImDrawListSplitter
 //-----------------------------------------------------------------------------
 // FIXME: This may be a little confusing, trying to be a little too low-level/optimal instead of just doing vector swap..
 //-----------------------------------------------------------------------------
@@ -1435,7 +1426,10 @@ void ImDrawListSplitter::Split(ImDrawList* draw_list, int channels_count)
     IM_ASSERT(_Current == 0 && _Count <= 1 && "Nested channel splitting is not supported. Please use separate instances of ImDrawListSplitter.");
     int old_channels_count = _Channels.Size;
     if (old_channels_count < channels_count)
+    {
+        _Channels.reserve(channels_count); // Avoid over reserving since this is likely to stay stable
         _Channels.resize(channels_count);
+    }
     _Count = channels_count;
 
     // Channels[] (24/32 bytes each) hold storage that we'll swap with draw_list->_CmdBuffer/_IdxBuffer
@@ -1897,11 +1891,11 @@ ImFont* ImFontAtlas::AddFontDefault(const ImFontConfig* font_cfg_template)
     if (font_cfg.Name[0] == '\0')
         ImFormatString(font_cfg.Name, IM_ARRAYSIZE(font_cfg.Name), "ProggyClean.ttf, %dpx", (int)font_cfg.SizePixels);
     font_cfg.EllipsisChar = (ImWchar)0x0085;
+    font_cfg.GlyphOffset.y = 1.0f * IM_FLOOR(font_cfg.SizePixels / 13.0f);  // Add +1 offset per 13 units
 
     const char* ttf_compressed_base85 = GetDefaultCompressedFontDataTTFBase85();
     const ImWchar* glyph_ranges = font_cfg.GlyphRanges != NULL ? font_cfg.GlyphRanges : GetGlyphRangesDefault();
     ImFont* font = AddFontFromMemoryCompressedBase85TTF(ttf_compressed_base85, font_cfg.SizePixels, &font_cfg, glyph_ranges);
-    font->DisplayOffset.y = 1.0f;
     return font;
 }
 
@@ -2774,7 +2768,6 @@ ImFont::ImFont()
     FallbackAdvanceX = 0.0f;
     FallbackChar = (ImWchar)'?';
     EllipsisChar = (ImWchar)-1;
-    DisplayOffset = ImVec2(0.0f, 0.0f);
     FallbackGlyph = NULL;
     ContainerAtlas = NULL;
     ConfigData = NULL;
@@ -3169,8 +3162,8 @@ void ImFont::RenderChar(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col
     if (!glyph || !glyph->Visible)
         return;
     float scale = (size >= 0.0f) ? (size / FontSize) : 1.0f;
-    pos.x = IM_FLOOR(pos.x + DisplayOffset.x);
-    pos.y = IM_FLOOR(pos.y + DisplayOffset.y);
+    pos.x = IM_FLOOR(pos.x);
+    pos.y = IM_FLOOR(pos.y);
     draw_list->PrimReserve(6, 4);
     draw_list->PrimRectUV(ImVec2(pos.x + glyph->X0 * scale, pos.y + glyph->Y0 * scale), ImVec2(pos.x + glyph->X1 * scale, pos.y + glyph->Y1 * scale), ImVec2(glyph->U0, glyph->V0), ImVec2(glyph->U1, glyph->V1), col);
 }
@@ -3181,8 +3174,8 @@ void ImFont::RenderText(ImDrawList* draw_list, float size, ImVec2 pos, ImU32 col
         text_end = text_begin + strlen(text_begin); // ImGui:: functions generally already provides a valid text_end, so this is merely to handle direct calls.
 
     // Align to be pixel perfect
-    pos.x = IM_FLOOR(pos.x + DisplayOffset.x);
-    pos.y = IM_FLOOR(pos.y + DisplayOffset.y);
+    pos.x = IM_FLOOR(pos.x);
+    pos.y = IM_FLOOR(pos.y);
     float x = pos.x;
     float y = pos.y;
     if (y > clip_rect.w)
